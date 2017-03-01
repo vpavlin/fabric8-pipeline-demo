@@ -251,6 +251,9 @@ items:
             value: "true"
           - name: KUBERNETES_MASTER
             value: https://kubernetes.default:443
+          resources:
+            limits:
+              memory: 350Mi
           image: fabric8/jenkins-openshift:vf9ef32a
           imagePullPolicy: Always
           livenessProbe:

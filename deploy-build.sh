@@ -4,7 +4,27 @@ indent() { sed 's/^/=> /'; }
 
 set -e  
 
+#Project to be created in OpenShift
 PROJECT=$1
+
+#URI of Git repository containing code and Jenkinsfile
+URI=${2%%@*}
+BRANCH=${2##*@}
+BUILD_FILE="build.yaml"
+BUILD_NAME=${URI##*/}
+if [ -n "${URI}" ]; then
+  NEW_BF="build-${BUILD_NAME}.yaml"
+  sed 's#uri: .*#uri: '${URI}'#' ${BUILD_FILE} > ${NEW_BF}
+  if [ "${URI}" != "${BRANCH}" ]; then
+    sed -i 's@ref: .*@ref: '${BRANCH}'@' ${NEW_BF}
+  fi
+     
+  sed -i 's/name: .*/name: '${BUILD_NAME}'/' ${NEW_BF}
+  BUILD_FILE=${NEW_BF}
+else
+  BUILD_NAME=$(cat ${BUILD_FILE} | sed 's/.*name:\s*\(\S*\)/\1/')
+fi
+
 STAGING="staging"
 PROD="production"
 
@@ -43,11 +63,9 @@ while true; do
 done
 
 echo "Adding Build Config"
-oc apply -f build.yaml
+oc apply -f ${BUILD_FILE}
 
-build_name=$(cat build.yaml | grep name: | sed 's/.*:\s//')
-
-oc start-build ${build_name}
+oc start-build ${BUILD_NAME}
 
 jenkins_route=$(oc get route jenkins --output jsonpath=http://{.spec.host})
 pipeline=$(oc project | sed 's#.*project "\([^"]*\)".*server "\([^"]*\)".*#\2/console/project/\1/browse/pipelines#')

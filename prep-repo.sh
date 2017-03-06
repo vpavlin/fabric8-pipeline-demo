@@ -19,15 +19,15 @@ REPO_BRANCH=$(git branch -a)
 for b in ${BRANCHES}; do
   echo ${REPO_BRANCH} | grep -qw $b
 
-  git checkout master 2>&1 | indent
   if [ "$?" -eq 0 ]; then
     echo "Branch $b already exists"
     git checkout $b
   else
+    git checkout master
     git checkout -b $b 2>&1 | indent
   fi
 
-  sed -i.bckp "s#fabric8io/fabric8-pipeline-library@[^']*#vpavlin/fabric8-pipeline-library@$b#" Jenkinsfile
+  sed -i.bckp "s#[^/]*/fabric8-pipeline-library@[^']*#vpavlin/fabric8-pipeline-library@$b#" Jenkinsfile
   git diff | indent
   git commit -a -m "Change library branch to $b" 2>&1 | indent
   git push --set-upstream origin $b 2>&1 | indent

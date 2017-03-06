@@ -2,16 +2,43 @@
 
 indent() { sed 's/^/=> /'; }
 
-set -e  
+set -e
 
 #Project to be created in OpenShift
-PROJECT=$1
-
+PROJECT=""
 #URI of Git repository containing code and Jenkinsfile
-URI=${2%%@*}
-BRANCH=${2##*@}
+URI=""
+FULL_URI=""
+
+#Don't create anything, just rebuild if REBUILD=true'
+REBUILD=false
+
+DELETE=false
+BUILD_TIME=false
+
+while [ -n "$1" ]; do
+  case "$1" in
+    -h) echo "$0 [-hr] PROJECT [URI[@BRANCH]]"
+        exit
+        ;;
+    -r|--rebuild) REBUILD=true
+        ;;
+    -d|--delete) DELETE=true
+        ;;
+    -t|--build-time) BUILD_TIME=true
+        ;;
+    *) [ -z "${PROJECT}" ] && PROJECT=$1 && shift && continue
+       [ -z "${URI}" ] && URI=${1%%@*} && FULL_URI=${1} && shift && continue
+       ;;
+  esac
+  shift
+done
+
+[[ "${URI}" =~ /$ ]] && URI=${URI%%/}
+
+BRANCH=${FULL_URI##*@}
 BUILD_FILE="build.yaml"
-BUILD_NAME=${URI##*/}
+BUILD_NAME=$(echo ${URI##*/} | tr "_" "-")
 if [ -n "${URI}" ]; then
   NEW_BF="build-${BUILD_NAME}.yaml"
   sed 's#uri: .*#uri: '${URI}'#' ${BUILD_FILE} > ${NEW_BF}
@@ -23,6 +50,25 @@ if [ -n "${URI}" ]; then
   BUILD_FILE=${NEW_BF}
 else
   BUILD_NAME=$(cat ${BUILD_FILE} | sed 's/.*name:\s*\(\S*\)/\1/')
+fi
+
+if ${BUILD_TIME}; then
+  BUILD_ITEM=$(cat build.items) 2> /dev/null
+  echo -n "Build time of ${PROJECT}/${BUILD_NAME} is "
+  oc --namespace ${PROJECT} get build ${BUILD_ITEM} --output jsonpath={.status.duration}" / "{.status.phase};
+  echo
+  exit
+fi
+
+if ${DELETE}; then
+  oc delete project ${PROJECT} ${PROJECT}-staging ${PROJECT}-production
+  exit
+fi
+
+if ${REBUILD}; then
+  oc project ${PROJECT}
+  oc start-build ${BUILD_NAME} | sed 's/.*build "\([^"]*\)" started.*/\1/' > build.items
+  exit
 fi
 
 STAGING="staging"
@@ -65,7 +111,7 @@ done
 echo "Adding Build Config"
 oc apply -f ${BUILD_FILE}
 
-oc start-build ${BUILD_NAME}
+oc start-build ${BUILD_NAME} | sed 's/.*build "\([^"]*\)" started.*/\1/' > build.items
 
 jenkins_route=$(oc get route jenkins --output jsonpath=http://{.spec.host})
 pipeline=$(oc project | sed 's#.*project "\([^"]*\)".*server "\([^"]*\)".*#\2/console/project/\1/browse/pipelines#')
